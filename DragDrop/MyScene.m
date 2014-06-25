@@ -41,14 +41,74 @@ static NSString * const kAnimalNodeName = @"movable";
     return self;
 }
 
+/*
 -(void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
-    /* Called when a touch begins */
+    // Called when a touch begins
     
     UITouch *touch = [touches anyObject];
     
     CGPoint positionInScene = [touch locationInNode:self];
     
     [self selectNodeForTouch:positionInScene];
+}
+*/
+
+// 当scene第一次显示出来时会调用这个方法。在上面的方法中创建了一个pan手势识别器，并用当前的scene来对其做初始化，另外还传入一个callback：handlePanFrom:。接着把这个手势识别器添加到scene中的view里面。
+- (void)didMoveToView:(SKView *)view{
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanFrom:)];
+    [self.view addGestureRecognizer:pan];
+}
+
+//当手势开始、改变(例如用户持续drag)，以及结束时，上面这个callback函数都会被调用。该方法会进入不同的case，以处理不同的情况。
+
+- (void)handlePanFrom:(UIPanGestureRecognizer *)recognizer{
+    switch (recognizer.state) {
+        case UIGestureRecognizerStateBegan:{
+            //当手势开始时，将坐标系统转换为node坐标系(注意这里没有便捷的方法，只能这样处理).
+            CGPoint touchLocation = [recognizer locationInView:recognizer.view];
+            touchLocation = [self convertPointFromView:touchLocation];
+            //调用之前写的helper方法selectNodeForTouch:
+            [self selectNodeForTouch:touchLocation];
+            break;
+        }
+        //当手势发生改变时，需要计算出手势移动的量。还在手势识别器已经为我们存储了手势移动的累计量(translation)！不过考虑到效果的差异，我们需要在UIKit坐标系和Sprite Kit坐标系中对坐标进行转换。
+        case UIGestureRecognizerStateChanged:{
+            CGPoint translation = [recognizer translationInView:recognizer.view];
+            translation = CGPointMake(translation.x, -translation.y);
+            [self panForTranslation:translation];
+            //平移(pan)之后，需要把手势识别器上的translation设置为0，否则该值会继续被累加。
+            [recognizer setTranslation:CGPointZero inView:recognizer.view];
+            break;
+        }
+        //当手势结束之后，UIPanGestureRecognizer可以为我们提供一个移动的速度。通过这个速度可以对node做一个动画——滑动一小点，这样用户可以对node做一个快速的摇动，就像table view上的那种效果一样。
+        case UIGestureRecognizerStateEnded:{
+            if (![_selectedNode.name isEqualToString:kAnimalNodeName]) {
+                float scrollDuration = 0.2;
+                CGPoint velocity = [recognizer velocityInView:recognizer.view];
+                CGPoint pos = [_selectedNode position];
+                CGPoint p = mult(velocity, scrollDuration);
+                
+                CGPoint newPos = CGPointMake(pos.x + p.x, pos.y + p.y);
+                newPos = [self boundLayerPos:newPos];
+                [_selectedNode removeAllActions];
+                
+                SKAction *moveTo = [SKAction moveTo:newPos duration:scrollDuration];
+                [moveTo setTimingMode:SKActionTimingEaseOut];
+                [_selectedNode runAction:moveTo];
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    if (recognizer.state == UIGestureRecognizerStateBegan) {
+        
+
+        
+    } else if (recognizer.state == UIGestureRecognizerStateChanged) {
+        
+    } else if (recognizer.state == UIGestureRecognizerStateEnded) {
+    }
 }
 
 - (void)selectNodeForTouch:(CGPoint)touchLocation{
@@ -108,6 +168,10 @@ static NSString * const kAnimalNodeName = @"movable";
 
 float degToRad(float degree) {
 	return degree / 180.0f * M_PI;
+}
+
+CGPoint mult(const CGPoint v, const CGFloat s) {
+	return CGPointMake(v.x*s, v.y*s);
 }
 
 @end
